@@ -1,0 +1,59 @@
+{
+  "author": {
+    "name": "Adam Kucharik",
+    "email": "akucharik@gmail.com"
+  },
+  "description": "A timer for JavaScript games, animations, or anything with a render loop.",
+  "homepage": "",
+  "keywords": [
+    "timer",
+    "loop",
+    "raf",
+    "requestAnimationFrame",
+    "animation",
+    "game",
+    "render",
+    "javascript"
+  ],
+  "license": "MIT",
+  "main": "dist/looptime.js",
+  "unpkg": "dist/looptime.min.js",
+  "name": "Looptime",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akucharik/looptime"
+  },
+  "config": {
+    "entry": "src/scripts/looptime.js",
+    "outfile": "dist/looptime.js",
+    "outfilemin": "dist/looptime.min.js"
+  },
+  "scripts": {
+    "build": "browserify $npm_package_config_entry > $npm_package_config_outfile --standalone Looptime --transform babelify",
+    "prebuild": "npm run lint && npm run test && npm run clean",
+    "postbuild": "npm run minify",
+    "build:dev": "browserify $npm_package_config_entry > $npm_package_config_outfile --debug --standalone Looptime --transform babelify",
+    "prebuild:dev": "npm run lint && npm run test && npm run clean",
+    "clean": "del dist/*",
+    "env": "env",
+    "lint": "eslint src/scripts",
+    "minify": "uglifyjs $npm_package_config_outfile --compress --mangle --output $npm_package_config_outfilemin",
+    "test": "nyc mocha --reporter nyan --require babel-register"
+  },
+  "version": "0.1.0-alpha",
+  "devDependencies": {
+    "babel-preset-es2015": "^6.18.0",
+    "babel-register": "^6.23.0",
+    "babelify": "^7.3.0",
+    "browserify": "^13.1.1",
+    "chai": "^3.5.0",
+    "del-cli": "^1.0.0",
+    "eslint": "^3.19.0",
+    "jsdom": "^9.12.0",
+    "mocha": "^3.2.0",
+    "mocha-jsdom": "^1.1.0",
+    "nyc": "^10.3.2",
+    "sinon": "^2.1.0",
+    "uglify-js": "^3.0.7"
+  }
+}
