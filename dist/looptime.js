@@ -2,7 +2,7 @@
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
-  value: true
+    value: true
 });
 exports.version = exports.TimerManager = exports.Timer = undefined;
 
@@ -20,9 +20,19 @@ var _version2 = _interopRequireDefault(_version);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-exports.Timer = _timer2.default;
+exports.Timer = _timer2.default; /**
+                                 * @author       Adam Kucharik
+                                 * @copyright    2017-present, Adam Kucharik, All rights reserved.
+                                 * @license      https://github.com/akucharik/looptime/blob/master/LICENSE.md
+                                 */
+
 exports.TimerManager = _timerManager2.default;
 exports.version = _version2.default;
+exports.default = {
+    Timer: _timer2.default,
+    TimerManager: _timerManager2.default,
+    version: _version2.default
+};
 
 },{"./timer":2,"./timerManager":3,"./version":4}],2:[function(require,module,exports){
 "use strict";
@@ -35,16 +45,32 @@ var _createClass = function () { function defineProperties(target, props) { for 
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
+/**
+* @author       Adam Kucharik
+* @copyright    2017-present, Adam Kucharik, All rights reserved.
+* @license      https://github.com/akucharik/looptime/blob/master/LICENSE.md
+*/
+
 var repeat = {
     INFINITE: -1
 };
 
 /**
-* Creates a TapSquire instance.
+* Creates a Timer instance.
 * 
-* @class TapSquire
+* @class Timer
 * @constructor
-* @param {Element} element - The HTML element for which the TapSquire instance will manage events.
+* @param {Number} duration - The duration in milliseconds.
+* @param {Object} [options] - An object of timer options.
+* @param {Number} [options.delay=0] - The delay in milliseconds before the timer begins.
+* @param {Boolean} [options.destroyOnComplete=false] - Whether or not to destroy the timer upon completion.
+* @param {Number} [options.repeat=0] - The number of times that the time should repeat after its first iteration. To repeat indefinitely, use looptime.Timer.INFINITE or -1.
+* @param {Number} [options.repeatDelay=0] - The delay in milliseconds before the timer repeats.
+* @param {Function} [options.onStart] - A function to be called when the timer begins.
+* @param {Function} [options.onUpdate] - A function to be called when the timer updates.
+* @param {Function} [options.onComplete] - A function to be called when the timer completes.
+* @param {Function} [options.onRepeat] - A function to be called when the timer repeats.
+* @param {Object} [options.callbackScope=this] - The scope for all the callbacks.
 */
 
 var Timer = function () {
@@ -72,105 +98,281 @@ var Timer = function () {
         _classCallCheck(this, Timer);
 
         /**
-        * @property {Element} - The element to manage.
-        * @readonly
+        * @property {Number} - The delay in milliseconds before the timer begins.
         */
-        this.callbackScope = callbackScope;
         this.delay = delay;
+
+        /**
+        * @property {Boolean} - Whether or not to destroy the timer upon completion.
+        */
         this.destroyOnComplete = destroyOnComplete;
+
+        /**
+        * @property {Number} - The duration in milliseconds.
+        */
         this.duration = duration;
+
+        /**
+        * @property {Number} - The elapsed delay in milliseconds.
+        */
         this.elapsedDelay = 0;
+
+        /**
+        * @property {Number} - The elapsed time in milliseconds.
+        */
+        this.elapsedDuration = 0;
+
+        /**
+        * @property {Number} - The elapsed repeat delay in milliseconds.
+        */
         this.elapsedRepeatDelay = 0;
-        this.elapsedTime = 0;
-        this.isActive = false;
+
+        /**
+        * @property {Boolean} - Whether or not the timer has started. The timer is started when its delay has elapsed.
+        */
+        this.isStarted = false;
+
+        /**
+        * @property {Boolean} - Whether or not the timer is complete.
+        */
         this.isComplete = false;
+
+        /**
+        * @property {Number} - The number of times that the time should repeat after its first iteration. To repeat indefinitely, use looptime.Timer.INFINITE or -1.
+        */
         this.repeat = repeat;
+
+        /**
+        * @property {Number} - The delay in milliseconds before the timer repeats.
+        */
         this.repeatDelay = repeatDelay;
-        this._repeat = 0;
-        this.onStart = onStart.bind(this.callbackScope);
-        this.onUpdate = onUpdate.bind(this.callbackScope);
-        this.onComplete = onComplete.bind(this.callbackScope);
-        this.onRepeat = onRepeat.bind(this.callbackScope);
+
+        /**
+        * @property {Number} - The number of times the timer has repeated.
+        * @private
+        */
+        this._repeatCount = 0;
+
+        /**
+        * @property {Function} - A function to be called when the timer begins.
+        */
+        this.onStart = onStart.bind(callbackScope);
+
+        /**
+        * @property {Function} - A function to be called when the timer updates.
+        */
+        this.onUpdate = onUpdate.bind(callbackScope);
+
+        /**
+        * @property {Function} - A function to be called when the timer completes.
+        */
+        this.onComplete = onComplete.bind(callbackScope);
+
+        /**
+        * @property {Function} - A function to be called when the timer repeats.
+        */
+        this.onRepeat = onRepeat.bind(callbackScope);
     }
+
+    /**
+    * Updates the timer.
+    *
+    * @param {Number} deltaTime - The elapsed time since the timer was updated.
+    * @returns {this} self
+    */
+
 
     _createClass(Timer, [{
         key: "update",
         value: function update(deltaTime) {
-            var time = deltaTime;
-
             if (this.isComplete) {
                 return this;
             }
 
-            if (this.delay > this.elapsedDelay) {
-                this.elapsedDelay += time;
+            var progress = this._getProgress(deltaTime);
+            this.elapsedDelay = progress.elapsedDelay;
+            this.elapsedDuration = progress.elapsedDuration;
+            this.elapsedRepeatDelay = progress.elapsedRepeatDelay;
+            this._repeatCount = progress.repeatCount;
 
-                if (this.elapsedDelay >= this.delay) {
-                    time = this.elapsedDelay - this.delay;
-                } else {
-                    return this;
-                }
-            }
-
-            if (this._repeat > 0 && this.repeatDelay > this.elapsedRepeatDelay) {
-                this.elapsedRepeatDelay += time;
-
-                if (this.elapsedRepeatDelay >= this.repeatDelay) {
-                    time = this.elapsedRepeatDelay - this.repeatDelay;
-                } else {
-                    return this;
-                }
-            }
-
-            if (!this.isActive) {
-                this.isActive = true;
+            // Start
+            if (this.elapsedDuration > 0 && this.isStarted === false) {
+                this.isStarted = true;
                 this.onStart();
             }
 
-            this.elapsedTime += time;
-            this.onUpdate();
+            // Update
+            if (this.elapsedDuration > 0) {
+                this.onUpdate();
+            }
 
-            if (this.elapsedTime >= this.duration) {
-                if (this.repeat === repeat.INFINITE || this.repeat > this._repeat) {
-                    this._repeat++;
-                    this.elapsedTime = 0;
-                    this.elapsedRepeatDelay = 0;
-                    this.onRepeat();
-                } else {
-                    this.isActive = false;
-                    this.isComplete = true;
-                    this.onComplete();
-                }
+            // Repeat
+            var i = 0;
+            while (i < progress.deltaRepeatCount) {
+                this.onRepeat();
+                i++;
+            }
+
+            // Complete
+            if (this.elapsedDuration >= this.duration && this._repeatCount === this.repeat) {
+                this.isComplete = true;
+                this.onComplete();
             }
 
             return this;
         }
 
         /**
-        * Adds an event listener with TapSquire magic.
+        * @property {Number} - The total timer duration. Includes the delay, duration, and any repeating.
+        * @readonly
+        */
+
+    }, {
+        key: "_getProgress",
+        value: function _getProgress(deltaTime) {
+            var time = deltaTime;
+            var deltaElapsedDelay = 0;
+            var deltaElapsedDuration = 0;
+            var deltaElapsedRepeatDelay = 0;
+            var deltaRepeatCount = 0;
+            var elapsedDelay = this.elapsedDelay;
+            var elapsedDuration = this.elapsedDuration;
+            var elapsedRepeatDelay = this.elapsedRepeatDelay;
+
+            // Handle edge cases when last update was precisely at the end of the duration
+            if (this.elapsedDuration === this.duration) {
+                if (this._repeatCount === 0) {
+                    elapsedDuration = 0;
+                }
+
+                if (this.elapsedRepeatDelay === this.repeatDelay) {
+                    elapsedRepeatDelay = 0;
+                }
+            }
+
+            // Determine delay progress and remaining time
+            if (elapsedDelay < this.delay) {
+                elapsedDelay += time;
+
+                if (elapsedDelay > this.delay) {
+                    deltaElapsedDelay = this.delay - this.elapsedDelay;
+                    time = elapsedDelay - this.delay;
+                    elapsedDelay = this.delay;
+                } else {
+                    deltaElapsedDelay = time;
+                    time = 0;
+                }
+            }
+
+            // Determine repeat delay progress and remaining time
+            if (this.elapsedDelay === this.delay && this.elapsedDuration === this.duration || this._repeatCount > 0) {
+                if (elapsedRepeatDelay < this.repeatDelay) {
+                    elapsedRepeatDelay += time;
+
+                    if (elapsedRepeatDelay > this.repeatDelay) {
+                        deltaElapsedRepeatDelay = this.repeatDelay - this.elapsedRepeatDelay;
+                        time = elapsedRepeatDelay - this.repeatDelay;
+                        elapsedRepeatDelay = this.repeatDelay;
+                        deltaRepeatCount++;
+                    } else {
+                        deltaElapsedRepeatDelay = time;
+                        time = 0;
+                    }
+                }
+            }
+
+            deltaElapsedDuration = time;
+            elapsedDuration += time;
+
+            // Determine repeat progress        
+            if (elapsedDuration > this.duration && (this.repeat > 0 || this.repeat === repeat.INFINITE)) {
+                elapsedDuration -= this.duration;
+
+                // Determine repeat count and remaining time
+                if (elapsedDuration > this._repeatDuration) {
+                    var maxRepeats = Math.floor(elapsedDuration / this._repeatDuration);
+                    var repeats = this.repeat === repeat.INFINITE ? maxRepeats : Math.min(this.repeat, maxRepeats);
+                    elapsedDuration = elapsedDuration - this._repeatDuration * repeats;
+                    deltaRepeatCount += repeats;
+
+                    if (deltaRepeatCount + this._repeatCount === this.repeat) {
+                        elapsedDuration += this.duration;
+                        elapsedRepeatDelay += this.repeatDelay;
+                    }
+                }
+
+                // Determine repeat delay progress and remaining time
+                if (this._repeatCount + deltaRepeatCount < this.repeat || this.repeat === repeat.INFINITE) {
+                    if (elapsedDuration > this.repeatDelay) {
+                        deltaElapsedRepeatDelay = elapsedRepeatDelay = this.repeatDelay;
+                        deltaElapsedDuration = elapsedDuration -= this.repeatDelay;
+
+                        if (this._repeatCount + deltaRepeatCount < this.repeat || this.repeat === repeat.INFINITE) {
+                            deltaRepeatCount++;
+                        }
+                    } else {
+                        deltaElapsedRepeatDelay = elapsedRepeatDelay = elapsedDuration;
+                        deltaElapsedDuration = elapsedDuration = 0;
+                    }
+                }
+            }
+            // Increment repeat count when last update was precisely at the ended of repeat delay 
+            else if (this.elapsedDuration === 0 && this.elapsedRepeatDelay === this.repeatDelay && (this.repeat > 0 || this.repeat === repeat.INFINITE)) {
+                    deltaRepeatCount++;
+                }
+
+            return {
+                deltaElapsedDelay: deltaElapsedDelay,
+                deltaElapsedDuration: deltaElapsedDuration,
+                deltaElapsedRepeatDelay: deltaElapsedRepeatDelay,
+                deltaRepeatCount: deltaRepeatCount,
+                elapsedDelay: elapsedDelay,
+                elapsedDuration: elapsedDuration,
+                elapsedRepeatDelay: elapsedRepeatDelay,
+                repeatCount: deltaRepeatCount + this._repeatCount
+            };
+        }
+
+        /**
+        * Restarts the timer.
         *
-        * @param {String} type - The event type to listen for.
-        * @param {Function} handler - A function to execute when the event is triggered.
-        * @param {Boolean} useCapture - Indicates that events of this type will be dispatched to the registered listener before being dispatched to any EventTarget beneath it in the DOM tree.
-        */ /*
-           * Adds an event listener with TapSquire magic.
-           *
-           * @param {String} type - The event type to listen for.
-           * @param {Function} handler - A function to execute when the event is triggered.
-           * @param {Object} options - An object of options.
-           */
+        * @param {Boolean} includeDelay - Whether or not to observe the delay when restarting.
+        * @returns {this} self
+        */
 
     }, {
         key: "restart",
         value: function restart() {
-            this.elapsedDelay = 0;
+            var includeDelay = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
+
+            if (includeDelay === true) {
+                this.elapsedDelay = 0;
+            }
+
+            this.elapsedDuration = 0;
             this.elapsedRepeatDelay = 0;
-            this.elapsedTime = 0;
-            this.isActive = false;
+            this.isStarted = false;
             this.isComplete = false;
-            this._repeat = 0;
+            this._repeatCount = 0;
 
             return this;
+        }
+    }, {
+        key: "totalDuration",
+        get: function get() {
+            return this.repeat === repeat.INFINITE ? Infinity : this.delay + this.duration + this.repeat * (this.repeatDelay + this.duration);
+        }
+
+        /**
+        * @property {Number} - The duration of a single repeat. Includes the repeat delay.
+        * @private
+        * @readonly
+        */
+
+    }, {
+        key: "_repeatDuration",
+        get: function get() {
+            return this.repeat > 0 || this.repeat === repeat.INFINITE ? this.repeatDelay + this.duration : 0;
         }
     }]);
 
@@ -186,7 +388,11 @@ Object.defineProperty(exports, "__esModule", {
     value: true
 });
 
-var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }(); /**
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     * @author       Adam Kucharik
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     * @copyright    2017-present, Adam Kucharik, All rights reserved.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     * @license      https://github.com/akucharik/looptime/blob/master/LICENSE.md
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     */
 
 var _timer = require('./timer');
 
@@ -271,8 +477,8 @@ Object.defineProperty(exports, "__esModule", {
 });
 /**
 * @author       Adam Kucharik
-* @copyright    2016-present, Adam Kucharik, All rights reserved.
-* @license      https://github.com/akucharik/oculo/blob/master/LICENSE.md
+* @copyright    2017-present, Adam Kucharik, All rights reserved.
+* @license      https://github.com/akucharik/looptime/blob/master/LICENSE.md
 */
 
 var version = '0.1.0-alpha';
