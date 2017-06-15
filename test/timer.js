@@ -21,6 +21,13 @@ describe('Timer:', () => {
     let zeroTimer;
     let zeroTimerDelay;
     
+    let infiniteTimer;
+    let infiniteStartSpy;
+    let infiniteUpdateSpy;
+    let infiniteCompleteSpy;
+    let infiniteRepeatSpy;
+    let infiniteCallbackScope = {};
+    
     let fakeTimer = sinon.useFakeTimers();
     
     jsdom();
@@ -50,6 +57,23 @@ describe('Timer:', () => {
         customCompleteSpy = sinon.spy(customTimer, 'onComplete');
         customRepeatSpy = sinon.spy(customTimer, 'onRepeat');
         
+        infiniteTimer = new Timer(1000, {
+            delay: 500,
+            destroyOnComplete: true,
+            repeat: -1,
+            repeatDelay: 500,
+            onStart: function () {},
+            onUpdate: function () {},
+            onComplete: function () {},
+            onRepeat: function () {},
+            callbackScope: infiniteCallbackScope
+        });
+        
+        infiniteStartSpy = sinon.spy(infiniteTimer, 'onStart');
+        infiniteUpdateSpy = sinon.spy(infiniteTimer, 'onUpdate');
+        infiniteCompleteSpy = sinon.spy(infiniteTimer, 'onComplete');
+        infiniteRepeatSpy = sinon.spy(infiniteTimer, 'onRepeat');
+        
         zeroTimer = new Timer(0);
         zeroTimerDelay = new Timer(0, {
             delay: 500
@@ -58,6 +82,12 @@ describe('Timer:', () => {
     
     afterEach('test teardown', () => {
         fakeTimer.restore();
+
+        timer.restart(true);
+        customTimer.restart(true);
+        infiniteTimer.restart(true);
+        zeroTimer.restart(true);
+        zeroTimerDelay.restart(true);
     });
 
     describe('when getting the total duration', () => {
@@ -77,6 +107,203 @@ describe('Timer:', () => {
             expect(customTimer.totalDuration).to.equal(Infinity);
         });
     });
+
+    describe('when getting repeat delay progress from a delay of 0ms on a finite repeat timer', () => {
+        it('should be within the delay', () => {
+            let progress = customTimer._getRepeatDelayProgress(16, 0);
+            expect(progress.deltaElapsedTime).to.equal(16);
+            expect(progress.elapsedTime).to.equal(16);
+        });
+        
+        it('should be on the delay', () => {
+            let progress = customTimer._getRepeatDelayProgress(500, 0);
+            expect(progress.deltaElapsedTime).to.equal(500);
+            expect(progress.elapsedTime).to.equal(500);
+        });
+        
+        it('should be after the delay', () => {
+            let progress = customTimer._getRepeatDelayProgress(516, 0);
+            expect(progress.deltaElapsedTime).to.equal(500);
+            expect(progress.elapsedTime).to.equal(500);
+        });
+    });
+    
+    describe('when getting infinite repeat delay progress from a delay of 0ms on an infinite repeat timer', () => {
+        it('should be within the delay', () => {
+            let progress = infiniteTimer._getRepeatDelayProgress(16, 0);
+            expect(progress.deltaElapsedTime).to.equal(16);
+            expect(progress.elapsedTime).to.equal(16);
+        });
+        
+        it('should be on the delay', () => {
+            let progress = infiniteTimer._getRepeatDelayProgress(500, 0);
+            expect(progress.deltaElapsedTime).to.equal(500);
+            expect(progress.elapsedTime).to.equal(500);
+        });
+        
+        it('should be after the delay', () => {
+            let progress = infiniteTimer._getRepeatDelayProgress(516, 0);
+            expect(progress.deltaElapsedTime).to.equal(500);
+            expect(progress.elapsedTime).to.equal(500);
+        });
+    });
+    
+    describe('when getting repeat delay progress from a delay of 16ms on a finite repeat timer', () => {
+        it('should be within the delay', () => {
+            let progress = customTimer._getRepeatDelayProgress(16, 16);
+            expect(progress.deltaElapsedTime).to.equal(16);
+            expect(progress.elapsedTime).to.equal(32);
+        });
+        
+        it('should be on the delay', () => {
+            let progress = customTimer._getRepeatDelayProgress(484, 16);
+            expect(progress.deltaElapsedTime).to.equal(484);
+            expect(progress.elapsedTime).to.equal(500);
+        });
+        
+        it('should be after the delay', () => {
+            let progress = customTimer._getRepeatDelayProgress(500, 16);
+            expect(progress.deltaElapsedTime).to.equal(484);
+            expect(progress.elapsedTime).to.equal(500);
+        });
+    });
+    
+    describe('when getting repeat delay progress from a delay of 16ms on an infinite repeat timer', () => {
+        it('should be within the delay', () => {
+            let progress = infiniteTimer._getRepeatDelayProgress(16, 16);
+            expect(progress.deltaElapsedTime).to.equal(16);
+            expect(progress.elapsedTime).to.equal(32);
+        });
+        
+        it('should be on the delay', () => {
+            let progress = infiniteTimer._getRepeatDelayProgress(484, 16);
+            expect(progress.deltaElapsedTime).to.equal(484);
+            expect(progress.elapsedTime).to.equal(500);
+        });
+        
+        it('should be after the delay', () => {
+            let progress = infiniteTimer._getRepeatDelayProgress(500, 16);
+            expect(progress.deltaElapsedTime).to.equal(484);
+            expect(progress.elapsedTime).to.equal(500);
+        });
+    });
+    
+    describe('when getting progress from a duration of 0ms on a 0 duration non-delayed timer', () => {
+        it('should be after the duration', () => {
+            let progress = zeroTimer._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(0);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(0);
+        });
+    });
+    
+    describe('when getting progress from a delay of 0ms on a 0 duration delayed timer', () => {
+        it('should be within the delay', () => {
+            let progress = zeroTimerDelay._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(16);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(0);
+        });
+
+        it('should be on the delay', () => {
+            let progress = zeroTimerDelay._getProgress(500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(0);
+        });
+        
+        it('should be after the delay', () => {
+            let progress = zeroTimerDelay._getProgress(516);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(0);
+        });
+    });
+    
+    describe('when getting progress from a delay of 16ms on a 0 duration delayed timer', () => {
+        beforeEach('test setup', () => {
+            zeroTimerDelay.update(16);
+        });
+        
+        it('should be within the delay', () => {
+            let progress = zeroTimerDelay._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(32);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(0);
+        });
+
+        it('should be on the delay', () => {
+            let progress = zeroTimerDelay._getProgress(484);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(0);
+        });
+        
+        it('should be after the delay', () => {
+            let progress = zeroTimerDelay._getProgress(500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(0);
+        });
+    });
+    
+    describe('when getting progress from the end of the delay on a 0 duration delayed timer', () => {
+        beforeEach('test setup', () => {
+            zeroTimerDelay.update(500);
+        });
+        
+        it('should be after the delay', () => {
+            let progress = zeroTimerDelay._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(0);
+        });
+    });
+    
+    describe('when getting progress from a duration of 0ms on a non-delayed timer', () => {
+        it('should be within the duration', () => {
+            let progress = timer._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(0);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(0);
+        });
+        
+        it('should be on the duration', () => {
+            let progress = timer._getProgress(1000);
+            expect(progress.elapsedDelay).to.equal(0);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(0);
+        });
+        
+        it('should be after the duration', () => {
+            let progress = timer._getProgress(1016);
+            expect(progress.elapsedDelay).to.equal(0);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(1016);
+            expect(progress.repeatCount).to.equal(0);
+        });
+    });
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     describe('when getting progress from 0ms', () => {
         it('of 0 duration timer', () => {
@@ -172,7 +399,7 @@ describe('Timer:', () => {
             expect(progress.elapsedDelay).to.equal(500);
             expect(progress.elapsedRepeatDelay).to.equal(100);
             expect(progress.elapsedDuration).to.equal(0);
-            expect(progress.repeatCount).to.equal(0);
+            expect(progress.repeatCount).to.equal(1);
         });
         
         it('on repeat delay of delayed timer', () => {
@@ -180,7 +407,7 @@ describe('Timer:', () => {
             expect(progress.elapsedDelay).to.equal(500);
             expect(progress.elapsedRepeatDelay).to.equal(500);
             expect(progress.elapsedDuration).to.equal(0);
-            expect(progress.repeatCount).to.equal(0);
+            expect(progress.repeatCount).to.equal(1);
         });
         
         it('within repeat 1 of delayed timer', () => {
@@ -204,7 +431,7 @@ describe('Timer:', () => {
             expect(progress.elapsedDelay).to.equal(500);
             expect(progress.elapsedRepeatDelay).to.equal(100);
             expect(progress.elapsedDuration).to.equal(0);
-            expect(progress.repeatCount).to.equal(1);
+            expect(progress.repeatCount).to.equal(2);
         });
         
         it('on repeat 2 delay of delayed timer', () => {
@@ -212,7 +439,7 @@ describe('Timer:', () => {
             expect(progress.elapsedDelay).to.equal(500);
             expect(progress.elapsedRepeatDelay).to.equal(500);
             expect(progress.elapsedDuration).to.equal(0);
-            expect(progress.repeatCount).to.equal(1);
+            expect(progress.repeatCount).to.equal(2);
         });
         
         it('within repeat 2 of delayed timer', () => {
@@ -240,7 +467,7 @@ describe('Timer:', () => {
         });
     });
     
-    describe('when getting progress from a delay', () => {
+    describe('when getting progress from within a delay', () => {
         beforeEach('test setup', () => {
             timer.update(16);
             customTimer.update(16);
@@ -338,7 +565,7 @@ describe('Timer:', () => {
             expect(progress.elapsedDelay).to.equal(500);
             expect(progress.elapsedRepeatDelay).to.equal(16);
             expect(progress.elapsedDuration).to.equal(0);
-            expect(progress.repeatCount).to.equal(0);
+            expect(progress.repeatCount).to.equal(1);
         });
         
         it('on repeat delay of delayed timer', () => {
@@ -346,7 +573,7 @@ describe('Timer:', () => {
             expect(progress.elapsedDelay).to.equal(500);
             expect(progress.elapsedRepeatDelay).to.equal(500);
             expect(progress.elapsedDuration).to.equal(0);
-            expect(progress.repeatCount).to.equal(0);
+            expect(progress.repeatCount).to.equal(1);
         });
         
         it('within repeat 1 of delayed timer', () => {
@@ -370,7 +597,7 @@ describe('Timer:', () => {
             expect(progress.elapsedDelay).to.equal(500);
             expect(progress.elapsedRepeatDelay).to.equal(16);
             expect(progress.elapsedDuration).to.equal(0);
-            expect(progress.repeatCount).to.equal(1);
+            expect(progress.repeatCount).to.equal(2);
         });
         
         it('on repeat 2 delay of delayed timer', () => {
@@ -378,7 +605,7 @@ describe('Timer:', () => {
             expect(progress.elapsedDelay).to.equal(500);
             expect(progress.elapsedRepeatDelay).to.equal(500);
             expect(progress.elapsedDuration).to.equal(0);
-            expect(progress.repeatCount).to.equal(1);
+            expect(progress.repeatCount).to.equal(2);
         });
         
         it('within repeat 2 of delayed timer', () => {
@@ -405,6 +632,373 @@ describe('Timer:', () => {
             expect(progress.repeatCount).to.equal(2);
         });
     });
+    
+    describe('when getting progress from within the duration', () => {
+        beforeEach('test setup', () => {
+            timer.update(16);
+            customTimer.update(516);
+        });
+
+        afterEach('test teardown', () => {
+            timer.restart(true);
+            customTimer.restart(true);
+        });
+        
+        it('within duration of timer', () => {
+            let progress = timer._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(0);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(32);
+            expect(progress.repeatCount).to.equal(0);
+        });
+        
+        it('on duration of timer', () => {
+            let progress = timer._getProgress(984);
+            expect(progress.elapsedDelay).to.equal(0);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(0);
+        });
+        
+        it('after duration of timer', () => {
+            let progress = timer._getProgress(1000);
+            expect(progress.elapsedDelay).to.equal(0);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(1016);
+            expect(progress.repeatCount).to.equal(0);
+        });
+        
+        it('within duration of delayed timer', () => {
+            let progress = customTimer._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(32);
+            expect(progress.repeatCount).to.equal(0);
+        });
+        
+        it('on duration of delayed timer', () => {
+            let progress = customTimer._getProgress(984);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(0);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(0);
+        });
+        
+        it('within repeat delay of delayed timer', () => {
+            let progress = customTimer._getProgress(1000);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(16);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('on repeat delay of delayed timer', () => {
+            let progress = customTimer._getProgress(1484);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('within repeat 1 of delayed timer', () => {
+            let progress = customTimer._getProgress(1500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('on repeat 1 of delayed timer', () => {
+            let progress = customTimer._getProgress(2484);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('within repeat 2 delay of delayed timer', () => {
+            let progress = customTimer._getProgress(2500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(16);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('on repeat 2 delay of delayed timer', () => {
+            let progress = customTimer._getProgress(2984);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('within repeat 2 of delayed timer', () => {
+            let progress = customTimer._getProgress(3000);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('on repeat 2 of delayed timer', () => {
+            let progress = customTimer._getProgress(3984);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('after repeat 2 of delayed timer', () => {
+            let progress = customTimer._getProgress(4000);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1016);
+            expect(progress.repeatCount).to.equal(2);
+        });
+    });
+    
+    describe('when getting progress from within the 1st repeat delay', () => {
+        beforeEach('test setup', () => {
+            customTimer.update(1516);
+        });
+
+        afterEach('test teardown', () => {
+            customTimer.restart(true);
+        });
+        
+        it('within repeat delay of delayed timer', () => {
+            let progress = customTimer._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(32);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('on repeat delay of delayed timer', () => {
+            let progress = customTimer._getProgress(484);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('within repeat 1 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('on repeat 1 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(1484);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('within repeat 2 delay of delayed timer', () => {
+            let progress = customTimer._getProgress(1500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(16);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('on repeat 2 delay of delayed timer', () => {
+            let progress = customTimer._getProgress(1984);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('within repeat 2 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(2000);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('on repeat 2 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(2984);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('after repeat 2 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(3000);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1016);
+            expect(progress.repeatCount).to.equal(2);
+        });
+    });
+    
+    
+    
+    
+    
+    
+    describe('when getting progress from within the 2nd repeat delay', () => {
+        beforeEach('test setup', () => {
+            customTimer.update(3016);
+        });
+
+        afterEach('test teardown', () => {
+            customTimer.restart(true);
+        });
+        
+        it('within repeat 2 delay of delayed timer', () => {
+            let progress = customTimer._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(32);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('on repeat 2 delay of delayed timer', () => {
+            let progress = customTimer._getProgress(484);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('within repeat 2 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('on repeat 2 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(1484);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('after repeat 2 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(1500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1016);
+            expect(progress.repeatCount).to.equal(2);
+        });
+    });
+    
+    
+    
+    
+    
+    
+    describe('when getting progress from within the 1st repeat duration', () => {
+        beforeEach('test setup', () => {
+            customTimer.update(2016);
+        });
+
+        afterEach('test teardown', () => {
+            customTimer.restart(true);
+        });
+        
+        it('within repeat 1 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(16);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(32);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('on repeat 1 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(984);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(1);
+        });
+        
+        it('within repeat 2 delay of delayed timer', () => {
+            let progress = customTimer._getProgress(1000);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(16);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('on repeat 2 delay of delayed timer', () => {
+            let progress = customTimer._getProgress(1484);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(0);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('within repeat 2 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(1500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(16);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('on repeat 2 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(2484);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1000);
+            expect(progress.repeatCount).to.equal(2);
+        });
+        
+        it('after repeat 2 duration of delayed timer', () => {
+            let progress = customTimer._getProgress(2500);
+            expect(progress.elapsedDelay).to.equal(500);
+            expect(progress.elapsedRepeatDelay).to.equal(500);
+            expect(progress.elapsedDuration).to.equal(1016);
+            expect(progress.repeatCount).to.equal(2);
+        });
+    });
+    
+    
+    
+    describe('when instantiating', () => {
+        it('should have the correct duration', () => {
+            expect(timer.duration).to.equal(1000);
+        });
+        
+        it('should have the correct defaults', () => {
+            expect(timer.delay).to.equal(0);
+            expect(timer.destroyOnComplete).to.be.false;
+            expect(timer.repeat).to.equal(0);
+            expect(timer.repeatDelay).to.equal(0);
+            expect(timer.onStart).to.be.a('function');
+            expect(timer.onUpdate).to.be.a('function');
+            expect(timer.onComplete).to.be.a('function');
+            expect(timer.onRepeat).to.be.a('function');
+        });
+        
+        it('should have the correct custom options', () => {
+            expect(customTimer.delay).to.equal(500);
+            expect(customTimer.destroyOnComplete).to.be.true;
+            expect(customTimer.repeat).to.equal(2);
+            expect(customTimer.repeatDelay).to.equal(500);
+            expect(customTimer.onStart).to.be.a('function');
+            expect(customTimer.onUpdate).to.be.a('function');
+            expect(customTimer.onComplete).to.be.a('function');
+            expect(customTimer.onRepeat).to.be.a('function');
+        });
+    });
+    
+    
+    
+    
+    
     
     describe('when instantiating', () => {
         it('should have the correct duration', () => {
@@ -598,7 +1192,7 @@ describe('Timer:', () => {
     describe('when repeating after a small time increment', () => {
         it('should repeat once', () => {
             customTimer.update(1516);
-            expect(customTimer._repeatCount).to.equal(0);
+            expect(customTimer._repeatCount).to.equal(1);
             expect(customTimer.elapsedRepeatDelay).to.equal(16);
             expect(customTimer.elapsedDuration).to.equal(0);
             expect(customRepeatSpy.callCount).to.equal(0);

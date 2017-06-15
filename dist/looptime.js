@@ -207,10 +207,18 @@ var Timer = function () {
             }
 
             // Repeat
-            var i = 0;
-            while (i < progress.deltaRepeatCount) {
+            if (progress.deltaRepeatCount > 0) {
+                var i = 1;
+                while (i <= progress.deltaRepeatCount) {
+                    if (i < progress.deltaRepeatCount) {
+                        this.onRepeat();
+                    } else if (i === progress.deltaRepeatCount && this.elapsedDuration > 0) {
+                        this.onRepeat();
+                    }
+                    i++;
+                }
+            } else if (this._repeatCount > 0 && this.elapsedDuration - progress.deltaElapsedDuration <= 0) {
                 this.onRepeat();
-                i++;
             }
 
             // Complete
@@ -229,6 +237,15 @@ var Timer = function () {
 
     }, {
         key: "_getProgress",
+
+
+        /**
+        * Gets the timer progress.
+        *
+        * @private
+        * @param {Number} deltaTime - The change in time.
+        * @returns {Object} An object representing the timer's progress.
+        */
         value: function _getProgress(deltaTime) {
             var time = deltaTime;
             var deltaElapsedDelay = 0;
@@ -238,20 +255,10 @@ var Timer = function () {
             var elapsedDelay = this.elapsedDelay;
             var elapsedDuration = this.elapsedDuration;
             var elapsedRepeatDelay = this.elapsedRepeatDelay;
-
-            // Handle edge cases when last update was precisely at the end of the duration
-            if (this.elapsedDuration === this.duration) {
-                if (this._repeatCount === 0) {
-                    elapsedDuration = 0;
-                }
-
-                if (this.elapsedRepeatDelay === this.repeatDelay) {
-                    elapsedRepeatDelay = 0;
-                }
-            }
+            var repeatCount = this._repeatCount;
 
             // Determine delay progress and remaining time
-            if (elapsedDelay < this.delay) {
+            if (this.elapsedDelay < this.delay) {
                 elapsedDelay += time;
 
                 if (elapsedDelay > this.delay) {
@@ -264,61 +271,54 @@ var Timer = function () {
                 }
             }
 
-            // Determine repeat delay progress and remaining time
-            if (this.elapsedDelay === this.delay && this.elapsedDuration === this.duration || this._repeatCount > 0) {
-                if (elapsedRepeatDelay < this.repeatDelay) {
-                    elapsedRepeatDelay += time;
-
-                    if (elapsedRepeatDelay > this.repeatDelay) {
-                        deltaElapsedRepeatDelay = this.repeatDelay - this.elapsedRepeatDelay;
-                        time = elapsedRepeatDelay - this.repeatDelay;
-                        elapsedRepeatDelay = this.repeatDelay;
-                        deltaRepeatCount++;
-                    } else {
-                        deltaElapsedRepeatDelay = time;
-                        time = 0;
-                    }
-                }
-            }
-
-            deltaElapsedDuration = time;
-            elapsedDuration += time;
-
-            // Determine repeat progress        
-            if (elapsedDuration > this.duration && (this.repeat > 0 || this.repeat === repeat.INFINITE)) {
-                elapsedDuration -= this.duration;
-
-                // Determine repeat count and remaining time
-                if (elapsedDuration > this._repeatDuration) {
-                    var maxRepeats = Math.floor(elapsedDuration / this._repeatDuration);
-                    var repeats = this.repeat === repeat.INFINITE ? maxRepeats : Math.min(this.repeat, maxRepeats);
-                    elapsedDuration = elapsedDuration - this._repeatDuration * repeats;
-                    deltaRepeatCount += repeats;
-
-                    if (deltaRepeatCount + this._repeatCount === this.repeat) {
-                        elapsedDuration += this.duration;
-                        elapsedRepeatDelay += this.repeatDelay;
-                    }
-                }
-
-                // Determine repeat delay progress and remaining time
-                if (this._repeatCount + deltaRepeatCount < this.repeat || this.repeat === repeat.INFINITE) {
-                    if (elapsedDuration > this.repeatDelay) {
-                        deltaElapsedRepeatDelay = elapsedRepeatDelay = this.repeatDelay;
-                        deltaElapsedDuration = elapsedDuration -= this.repeatDelay;
-
-                        if (this._repeatCount + deltaRepeatCount < this.repeat || this.repeat === repeat.INFINITE) {
-                            deltaRepeatCount++;
-                        }
-                    } else {
-                        deltaElapsedRepeatDelay = elapsedRepeatDelay = elapsedDuration;
-                        deltaElapsedDuration = elapsedDuration = 0;
-                    }
-                }
-            }
-            // Increment repeat count when last update was precisely at the ended of repeat delay 
-            else if (this.elapsedDuration === 0 && this.elapsedRepeatDelay === this.repeatDelay && (this.repeat > 0 || this.repeat === repeat.INFINITE)) {
+            // Determine repeat progress
+            if ((this.repeat > 0 || this.repeat === repeat.INFINITE) && (elapsedDuration + time > this.duration || repeatCount > 0)) {
+                // Handle first repeat
+                if (repeatCount === 0) {
+                    time = elapsedDuration + time - this.duration;
+                    elapsedDuration = 0;
                     deltaRepeatCount++;
+                    repeatCount++;
+                }
+
+                // Handle time increments that don't trigger a repeat
+                if (elapsedDuration > 0 && elapsedDuration + time <= this.duration) {
+                    deltaElapsedDuration = time;
+                    elapsedDuration += time;
+                }
+                // Handle time increments that trigger a repeat
+                else {
+                        time += elapsedDuration;
+                        while (time > 0) {
+                            // Handle repeat delay
+                            if (elapsedRepeatDelay < this.repeatDelay) {
+                                var repeatDelayProgress = this._getRepeatDelayProgress(time, elapsedRepeatDelay);
+                                deltaElapsedRepeatDelay = repeatDelayProgress.deltaElapsedTime;
+                                elapsedRepeatDelay = repeatDelayProgress.elapsedTime;
+                                time -= repeatDelayProgress.deltaElapsedTime;
+                            }
+
+                            // Handle maxed repeat duration
+                            if (time > this.duration && (repeatCount < this.repeat || this.repeat === repeat.INFINITE)) {
+                                time -= this.duration;
+                                elapsedDuration = 0;
+                                elapsedRepeatDelay = 0;
+                                deltaRepeatCount++;
+                                repeatCount++;
+                            }
+                            // Handle within repeat duration
+                            else {
+                                    deltaElapsedDuration = time;
+                                    elapsedDuration += time;
+                                    time = 0;
+                                }
+                        }
+                    }
+            }
+            // Determine non-repeat progress
+            else {
+                    deltaElapsedDuration = time;
+                    elapsedDuration += time;
                 }
 
             return {
@@ -329,7 +329,35 @@ var Timer = function () {
                 elapsedDelay: elapsedDelay,
                 elapsedDuration: elapsedDuration,
                 elapsedRepeatDelay: elapsedRepeatDelay,
-                repeatCount: deltaRepeatCount + this._repeatCount
+                repeatCount: repeatCount
+            };
+        }
+
+        /**
+        * Gets the repeat delay progress.
+        *
+        * @private
+        * @param {Number} deltaTime - The change in time.
+        * @param {Number} elapsedDelay - The current elapsed repeat delay time.
+        * @returns {Object} An object representing the timer's elapsed repeat delay progress.
+        */
+
+    }, {
+        key: "_getRepeatDelayProgress",
+        value: function _getRepeatDelayProgress(deltaTime, elapsedDelay) {
+            var deltaElapsedTime = 0;
+            var elapsedTime = elapsedDelay + deltaTime;
+
+            if (elapsedTime > this.repeatDelay) {
+                deltaElapsedTime = this.repeatDelay - elapsedDelay;
+                elapsedTime = this.repeatDelay;
+            } else {
+                deltaElapsedTime = deltaTime;
+            }
+
+            return {
+                deltaElapsedTime: deltaElapsedTime,
+                elapsedTime: elapsedTime
             };
         }
 
@@ -361,18 +389,6 @@ var Timer = function () {
         key: "totalDuration",
         get: function get() {
             return this.repeat === repeat.INFINITE ? Infinity : this.delay + this.duration + this.repeat * (this.repeatDelay + this.duration);
-        }
-
-        /**
-        * @property {Number} - The duration of a single repeat. Includes the repeat delay.
-        * @private
-        * @readonly
-        */
-
-    }, {
-        key: "_repeatDuration",
-        get: function get() {
-            return this.repeat > 0 || this.repeat === repeat.INFINITE ? this.repeatDelay + this.duration : 0;
         }
     }]);
 

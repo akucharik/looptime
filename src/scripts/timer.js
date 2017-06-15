@@ -143,10 +143,20 @@ class Timer {
         }
         
         // Repeat
-        let i = 0;
-        while (i < progress.deltaRepeatCount) {
+        if (progress.deltaRepeatCount > 0) {
+            let i = 1;
+            while (i <= progress.deltaRepeatCount) {
+                if (i < progress.deltaRepeatCount) {
+                    this.onRepeat();
+                }
+                else if (i === progress.deltaRepeatCount && this.elapsedDuration > 0) {
+                    this.onRepeat();
+                }
+                i++;
+            }
+        }
+        else if (this._repeatCount > 0 && this.elapsedDuration - progress.deltaElapsedDuration <= 0) {
             this.onRepeat();
-            i++;
         }
         
         // Complete
@@ -165,16 +175,14 @@ class Timer {
     get totalDuration () {
         return (this.repeat === repeat.INFINITE) ? Infinity : this.delay + this.duration + this.repeat * (this.repeatDelay + this.duration);
     }
-    
-    /**
-    * @property {Number} - The duration of a single repeat. Includes the repeat delay.
-    * @private
-    * @readonly
-    */
-    get _repeatDuration () {
-        return (this.repeat > 0 || this.repeat === repeat.INFINITE) ? this.repeatDelay + this.duration : 0;
-    }
 
+    /**
+    * Gets the timer progress.
+    *
+    * @private
+    * @param {Number} deltaTime - The change in time.
+    * @returns {Object} An object representing the timer's progress.
+    */
     _getProgress (deltaTime) {
         let time = deltaTime;
         let deltaElapsedDelay = 0;
@@ -184,20 +192,10 @@ class Timer {
         let elapsedDelay = this.elapsedDelay;
         let elapsedDuration = this.elapsedDuration;
         let elapsedRepeatDelay = this.elapsedRepeatDelay;
-        
-        // Handle edge cases when last update was precisely at the end of the duration
-        if (this.elapsedDuration === this.duration) {
-            if (this._repeatCount === 0) {
-                elapsedDuration = 0;
-            }
-
-            if (this.elapsedRepeatDelay === this.repeatDelay) {
-                elapsedRepeatDelay = 0;
-            }
-        }
+        let repeatCount = this._repeatCount;
         
         // Determine delay progress and remaining time
-        if (elapsedDelay < this.delay) {
+        if (this.elapsedDelay < this.delay) {
             elapsedDelay += time;
 
             if (elapsedDelay > this.delay) {
@@ -211,63 +209,54 @@ class Timer {
             }
         }
         
-        // Determine repeat delay progress and remaining time
-        if ((this.elapsedDelay === this.delay && this.elapsedDuration === this.duration) || this._repeatCount > 0) {            
-            if (elapsedRepeatDelay < this.repeatDelay) {
-                elapsedRepeatDelay += time;
-
-                if (elapsedRepeatDelay > this.repeatDelay) {
-                    deltaElapsedRepeatDelay = this.repeatDelay - this.elapsedRepeatDelay;
-                    time = elapsedRepeatDelay - this.repeatDelay;
-                    elapsedRepeatDelay = this.repeatDelay;
-                    deltaRepeatCount++;
-                }
-                else {
-                    deltaElapsedRepeatDelay = time;
-                    time = 0;
-                }
+        // Determine repeat progress
+        if ((this.repeat > 0 || this.repeat === repeat.INFINITE) && (elapsedDuration + time > this.duration || repeatCount > 0)) {
+            // Handle first repeat
+            if (repeatCount === 0) {
+                time = elapsedDuration + time - this.duration;
+                elapsedDuration = 0;
+                deltaRepeatCount++;
+                repeatCount++;
             }
-        }
-        
-        deltaElapsedDuration = time;
-        elapsedDuration += time;
-        
-        // Determine repeat progress        
-        if (elapsedDuration > this.duration && (this.repeat > 0 || this.repeat === repeat.INFINITE)) {
-            elapsedDuration -= this.duration;
             
-            // Determine repeat count and remaining time
-            if (elapsedDuration > this._repeatDuration) {
-                const maxRepeats = Math.floor(elapsedDuration / this._repeatDuration);
-                const repeats = (this.repeat === repeat.INFINITE) ? maxRepeats : Math.min(this.repeat, maxRepeats);
-                elapsedDuration = elapsedDuration - this._repeatDuration * repeats;                
-                deltaRepeatCount += repeats;
-                
-                if (deltaRepeatCount + this._repeatCount === this.repeat) {
-                    elapsedDuration += this.duration;
-                    elapsedRepeatDelay += this.repeatDelay;
-                }
+            // Handle time increments that don't trigger a repeat
+            if (elapsedDuration > 0 && elapsedDuration + time <= this.duration) {
+                deltaElapsedDuration = time;
+                elapsedDuration += time;
             }
+            // Handle time increments that trigger a repeat
+            else {
+                time += elapsedDuration;
+                while (time > 0) {
+                    // Handle repeat delay
+                    if (elapsedRepeatDelay < this.repeatDelay) {
+                        let repeatDelayProgress = this._getRepeatDelayProgress(time, elapsedRepeatDelay);
+                        deltaElapsedRepeatDelay = repeatDelayProgress.deltaElapsedTime;
+                        elapsedRepeatDelay = repeatDelayProgress.elapsedTime;
+                        time -= repeatDelayProgress.deltaElapsedTime;
+                    }
 
-            // Determine repeat delay progress and remaining time
-            if (this._repeatCount + deltaRepeatCount < this.repeat || this.repeat === repeat.INFINITE) {
-                if (elapsedDuration > this.repeatDelay) {
-                    deltaElapsedRepeatDelay = elapsedRepeatDelay = this.repeatDelay;
-                    deltaElapsedDuration = elapsedDuration -= this.repeatDelay;
-
-                    if (this._repeatCount + deltaRepeatCount < this.repeat || this.repeat === repeat.INFINITE) {
+                    // Handle maxed repeat duration
+                    if (time > this.duration && (repeatCount < this.repeat || this.repeat === repeat.INFINITE)) {
+                        time -= this.duration;
+                        elapsedDuration = 0;
+                        elapsedRepeatDelay = 0;
                         deltaRepeatCount++;
+                        repeatCount++;
+                    }
+                    // Handle within repeat duration
+                    else {
+                        deltaElapsedDuration = time;
+                        elapsedDuration += time;
+                        time = 0;
                     }
                 }
-                else {
-                    deltaElapsedRepeatDelay = elapsedRepeatDelay = elapsedDuration;
-                    deltaElapsedDuration = elapsedDuration = 0;
-                }
             }
         }
-        // Increment repeat count when last update was precisely at the ended of repeat delay 
-        else if (this.elapsedDuration === 0 && this.elapsedRepeatDelay === this.repeatDelay && (this.repeat > 0 || this.repeat === repeat.INFINITE)) {
-            deltaRepeatCount++;
+        // Determine non-repeat progress
+        else {
+            deltaElapsedDuration = time;
+            elapsedDuration += time;
         }
         
         return {
@@ -278,10 +267,35 @@ class Timer {
             elapsedDelay: elapsedDelay,
             elapsedDuration: elapsedDuration,
             elapsedRepeatDelay: elapsedRepeatDelay,
-            repeatCount: deltaRepeatCount + this._repeatCount
+            repeatCount: repeatCount
         };
     }
     
+    /**
+    * Gets the repeat delay progress.
+    *
+    * @private
+    * @param {Number} deltaTime - The change in time.
+    * @param {Number} elapsedDelay - The current elapsed repeat delay time.
+    * @returns {Object} An object representing the timer's elapsed repeat delay progress.
+    */
+    _getRepeatDelayProgress (deltaTime, elapsedDelay) {
+        let deltaElapsedTime = 0;
+        let elapsedTime = elapsedDelay + deltaTime;
+
+        if (elapsedTime > this.repeatDelay) {
+            deltaElapsedTime = this.repeatDelay - elapsedDelay;
+            elapsedTime = this.repeatDelay;
+        }
+        else {
+            deltaElapsedTime = deltaTime;
+        }
+        
+        return {
+            deltaElapsedTime: deltaElapsedTime,
+            elapsedTime: elapsedTime
+        };
+    }
     
     /**
     * Restarts the timer.
